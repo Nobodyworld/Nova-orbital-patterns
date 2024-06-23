@@ -23,48 +23,93 @@ T_0 = 1.0
 m_0 = 1.0
 c = 3e8  # Speed of light
 rho_0 = 1.0
-DAMPING_FACTOR = 0.99
-MAX_DISTANCE = 500  # Cap the maximum distance to prevent overflow
+DAMPING_FACTOR = 0.9
+MAX_DISTANCE = 200  # Cap the maximum distance to prevent overflow
+MAX_VELOCITY = 5  # Cap the maximum velocity to prevent overflow
+MAX_POSITION = 800  # Cap the maximum position to prevent overflow
+
+# Preon masses (in arbitrary units)
+MASS_A = 45.6
+MASS_B = 34.8
+MASS_C = 67.9
 
 # Aether particle class
 class AetherParticle:
-    def __init__(self, x, y, charge):
+    def __init__(self, x, y, preon_type):
         self.x = x
         self.y = y
-        self.charge = charge  # +1 for positive, -1 for negative
-        self.vx = 0
-        self.vy = 0
+        self.preon_type = preon_type  # A, B, or C
+        self.vx = random.uniform(-1, 1)  # Smaller initial velocity
+        self.vy = random.uniform(-1, 1)
         self.ax = 0
         self.ay = 0
         self.rho_PD = random.uniform(0.5, 1.5)  # Random initial density
         self.rho_ND = random.uniform(0.5, 1.5)
+        self.mass = self.get_mass()
+        self.charge = self.get_charge()
+
+    def get_mass(self):
+        if self.preon_type == 'A':
+            return MASS_A
+        elif self.preon_type == 'B':
+            return MASS_B
+        elif self.preon_type == 'C':
+            return MASS_C
+
+    def get_charge(self):
+        if self.preon_type == 'A':
+            return 0
+        elif self.preon_type == 'B':
+            return -1
+        elif self.preon_type == 'C':
+            return 2
 
     def update_position(self):
         self.vx += self.ax
         self.vy += self.ay
+        
+        # Apply damping factor
         self.vx *= DAMPING_FACTOR
         self.vy *= DAMPING_FACTOR
+
+        # Cap the velocity
+        self.vx = max(min(self.vx, MAX_VELOCITY), -MAX_VELOCITY)
+        self.vy = max(min(self.vy, MAX_VELOCITY), -MAX_VELOCITY)
+
+        # Update positions
         self.x += self.vx
         self.y += self.vy
-        self.ax, self.ay = 0, 0  # Reset acceleration after each update
+
+        # Cap the position
+        if self.x < 0 or self.x > width or self.y < 0 or self.y > height:
+            print(f"Resetting particle due to extreme position: x={self.x}, y={self.y}")
+            self.reset()
+
+        # Reset acceleration after each update
+        self.ax, self.ay = 0, 0
 
     def apply_force(self, fx, fy):
-        self.ax += fx / m_0
-        self.ay += fy / m_0
+        self.ax += fx / self.mass
+        self.ay += fy / self.mass
+
+    def reset(self):
+        self.x = random.randint(100, 700)
+        self.y = random.randint(100, 500)
+        self.vx = random.uniform(-1, 1)  # Reset with smaller initial velocity
+        self.vy = random.uniform(-1, 1)
+        self.ax = 0
+        self.ay = 0
 
     def draw(self):
         color = blue if self.charge > 0 else red
-        # Ensure x and y are within reasonable bounds before drawing
-        if abs(self.x) > width or abs(self.y) > height:
-            print(f"Error drawing particle: x={self.x}, y={self.y}")
-            return
         try:
             pygame.draw.circle(screen, color, (int(self.x), int(self.y)), 5)
-        except TypeError as e:
+        except (ValueError, OverflowError) as e:
             print(f"Error drawing particle: {e}, x={self.x}, y={self.y}")
+            self.reset()
 
 # Create a list of aether particles
-particles = [AetherParticle(random.randint(100, 700), random.randint(100, 500), random.choice([-1, 1])) for _ in range(20)]
+particles = [AetherParticle(random.randint(100, 700), random.randint(100, 500), random.choice(['A', 'B', 'C'])) for _ in range(20)]
 
 # Function to calculate forces based on displacement vectors and densities
 def calculate_forces():
@@ -81,7 +126,7 @@ def calculate_forces():
                     # Calculate displacement vectors and forces
                     P = (dx / distance, dy / distance)
                     rho_PD = particle.rho_PD
-                    rho_ND = particle.rho_ND
+                    rho_ND = other.rho_ND
                     U_PD = math.sqrt(particle.vx**2 + particle.vy**2)
                     U_ND = math.sqrt(other.vx**2 + other.vy**2)
                     
